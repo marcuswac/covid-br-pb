@@ -1,0 +1,3 @@
+[submodule "covid-br-data"]
+	path = data
+	url = https://github.com/marcuswac/covid-br-data

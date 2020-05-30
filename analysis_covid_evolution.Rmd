@@ -1,0 +1,802 @@
+---
+title: "Análise da evolução do COVID-19"
+author: "Marcus Carvalho"
+date: "Última atualização: 29/05/2020"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: true
+    toc_depth: 3
+    theme: sandstone
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(forcats)
+library(ggplot2)
+library(ggrepel)
+library(lubridate)
+library(readxl)
+library(scales)
+library(zoo)
+
+source("analysis_covid_utils.R")
+
+theme_set(theme_minimal(base_size = 12))
+knitr::opts_chunk$set(echo=FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 5)
+Sys.setlocale("LC_TIME", "pt_BR.UTF-8")
+```
+
+```{r data, include=FALSE}
+arquivo_covid19pb <- "https://raw.githubusercontent.com/covid19pb/covid19pb.github.io/master/data/dados_pb_covid19_casosPorCidade.csv"
+arquivo_pb_brasilio <- file.path("data", "casos_pb_20200520.csv")
+arquivo_ms <- "data/covid-br-ms-complete.csv"
+
+dados_ms <- carrega_dados_ms_csv(arquivo_ms)
+
+brasil_ms <- carrega_dados_brasil_ms(dados_ms)
+
+estados_ms <- carrega_dados_estados_ms(dados_ms) %>%
+  group_by(estado) %>%
+  mutate(populacaoTCU2019 = as.integer(populacaoTCU2019),
+         pop_estado = max(populacaoTCU2019, na.rm = TRUE)) %>%
+  filter(populacaoTCU2019 >= pop_estado)
+
+municipios_ms <- carrega_dados_municipios_ms(dados_ms)
+
+pb_ms <- estados_ms %>%
+  filter(estado == "PB")
+
+municipios_pb_ms <- municipios_ms %>%
+  filter(estado == "PB")
+  
+jp_ms <- municipios_ms %>%
+  filter(estado == "PB", municipio == "João Pessoa")
+
+pb_regioes <- carrega_dados_municipios_covid19pb(arquivo_covid19pb) %>%
+  select(municipio, micro, meso)
+
+brasil <- sumariza_casos_obitos(brasil_ms, min_obitos = 5)
+
+estados <- sumariza_casos_obitos(estados_ms, min_obitos = 5, agrupar_por = "estado")
+
+paraiba <- sumariza_casos_obitos(pb_ms, min_obitos = 1)
+
+municipios_pb <- sumariza_casos_obitos(municipios_pb_ms, min_obitos = 1,
+                                       agrupar_por = "municipio") %>%
+  left_join(pb_regioes, by = "municipio")
+
+joao_pessoa <- sumariza_casos_obitos(jp_ms, min_obitos = 1)
+```
+
+***
+
+# Brasil
+
+<br>
+
+### Óbitos novos no Brasil {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+```{r}
+min_mortes <- 5
+
+dados <- brasil %>%
+  filter(obitosAcumulados >= 5)
+```
+
+#### Logarítmica
+
+```{r}
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = FALSE)
+```
+
+<br>
+
+***
+
+### Óbitos novos nos estados {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <span style="color:black">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+```{r}
+dados <- estados %>%
+  filter(diasXobitos >= 0) %>%
+  ungroup() %>%
+  mutate(estado = fct_reorder(estado, obitosNovosMedia, max, .desc = TRUE))
+```
+
+#### Logarítmica
+
+```{r, fig.height=10}
+plot_novos_por_grupo(dados, obitosNovos, obitosNovosMedia, estado, regiao,
+                     log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r, fig.height=10}
+plot_novos_por_grupo(dados, obitosNovos, obitosNovosMedia, estado, regiao)
+```
+
+<br>
+
+***
+
+### Óbitos acumulados no Brasil {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+```{r}
+dados <- brasil %>%
+  filter(obitosAcumulados >= 1)
+```
+
+#### Logarítmica
+
+```{r}
+plot_acumulados_por_dia(dados, obitosAcumulados, obitosFracaoAumento,
+                        dataMetadeObitos, diasDobrouObitos, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+plot_acumulados_por_dia(dados, obitosAcumulados, obitosFracaoAumento,
+                        dataMetadeObitos, diasDobrouObitos)
+```
+
+<br>
+
+***
+
+### Óbitos acumulados nos estados {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+
+```{r, fig.height=10}
+dados <- estados %>%
+  filter(diasXobitos >= 0) %>%
+  ungroup() %>%
+  mutate(estado = fct_reorder(.$estado, .$obitosAcumulados, max, .desc = TRUE))
+```
+
+#### Logarítmica
+
+```{r, fig.height=10}
+plot_acumulados_por_grupo(dados, obitosAcumulados, obitosFracaoAumento,
+                          dataMetadeObitos, diasDobrouObitos,
+                          estado, regiao, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r, fig.height=10}
+plot_acumulados_por_grupo(dados, obitosAcumulados, obitosFracaoAumento,
+                          dataMetadeObitos, diasDobrouObitos,
+                          estado, regiao)
+```
+
+<br>
+
+***
+
+### Diferença de óbitos novos no Brasil {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Percentual <span style="color:#d9534f">por dia</span> em relação ao dia anterior e <ins style="color:black">média móvel</ins> para 7 dias</h5>
+
+```{r}
+dados <- brasil %>%
+  filter(obitosAcumulados >= 50)
+```
+
+#### Linear
+
+```{r}
+plot_fracao_novos_por_dia(dados, obitosFracaoAumento,  obitosFracaoAumentoMedia)
+```
+
+
+#### Logarítmica
+
+```{r}
+plot_fracao_novos_por_dia(dados, obitosFracaoAumento,  obitosFracaoAumentoMedia,
+                          log_y = TRUE)
+```
+
+<br>
+
+***
+
+### Casos novos no Brasil {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+```{r}
+min_mortes <- 5
+
+dados <- brasil %>%
+  filter(casosAcumulados >= 5)
+```
+
+#### Logarítmica
+
+```{r}
+plot_novos_por_dia(dados, casosNovos, casosNovosMedia, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+plot_novos_por_dia(dados, casosNovos, casosNovosMedia, log_y = FALSE)
+```
+
+<br>
+
+***
+
+### Casos novos nos estados {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <span style="color:black">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+```{r}
+dados <- estados %>%
+  filter(diasXobitos >= 0) %>%
+  ungroup() %>%
+  mutate(estado = fct_reorder(estado, casosNovosMedia, max, .desc = TRUE))
+```
+
+#### Logarítmica
+
+```{r, fig.height=10}
+plot_novos_por_grupo(dados, casosNovos, casosNovosMedia, estado, regiao,
+                     log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r, fig.height=10}
+plot_novos_por_grupo(dados, casosNovos, casosNovosMedia, estado, regiao)
+```
+
+<br>
+
+***
+
+### Casos acumulados no Brasil {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+```{r}
+dados <- brasil %>%
+  filter(casosAcumulados >= 1)
+```
+
+#### Logarítmica
+
+```{r}
+plot_acumulados_por_dia(dados, casosAcumulados, casosFracaoAumento,
+                        dataMetadeCasos, diasDobrouCasos, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+plot_acumulados_por_dia(dados, casosAcumulados, casosFracaoAumento,
+                        dataMetadeCasos, diasDobrouCasos)
+```
+
+<br>
+
+***
+
+### Casos acumulados nos estados {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+
+```{r, fig.height=10}
+dados <- estados %>%
+  filter(diasXobitos >= 0) %>%
+  ungroup() %>%
+  mutate(estado = fct_reorder(.$estado, .$casosAcumulados, max, .desc = TRUE))
+```
+
+#### Logarítmica
+
+```{r, fig.height=10}
+plot_acumulados_por_grupo(dados, casosAcumulados, casosFracaoAumento,
+                          dataMetadeCasos, diasDobrouCasos,
+                          estado, regiao, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r, fig.height=10}
+plot_acumulados_por_grupo(dados, casosAcumulados, casosFracaoAumento,
+                          dataMetadeCasos, diasDobrouCasos,
+                          estado, regiao)
+```
+
+<br>
+
+***
+
+### Diferença de casos novos no Brasil {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Percentual <span style="color:#d9534f">por dia</span> em relação ao dia anterior e <ins style="color:black">média móvel</ins> para 7 dias</h5>
+
+```{r}
+dados <- brasil %>%
+  filter(casosAcumulados >= 50)
+```
+
+#### Linear
+
+```{r}
+plot_fracao_novos_por_dia(dados, casosFracaoAumento,  casosFracaoAumentoMedia)
+```
+
+
+#### Logarítmica
+
+```{r}
+plot_fracao_novos_por_dia(dados, casosFracaoAumento,  casosFracaoAumentoMedia,
+                          log_y = TRUE)
+```
+
+<br>
+
+***
+
+
+# Paraíba
+
+### Óbitos novos na Paraíba {.tabset .tabset-fade .tabset-pills} 
+<h5 class="text-muted">Valores <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+```{r}
+min_mortes <- 1
+dados <- paraiba %>%
+  filter(obitosAcumulados >= min_mortes)
+```
+
+#### Linear
+
+```{r}
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia)
+```
+
+<br>
+
+***
+
+#### Logarítmica
+
+```{r}
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = TRUE)
+```
+
+<br>
+
+***
+
+### Óbitos novos nos municípios da Paraíba {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <span style="color:black">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+```{r}
+min_mortes <- 5
+
+top_municipios <- municipios_pb %>%
+  group_by(municipio) %>%
+  summarise(totalObitos = first(totalObitos)) %>%
+  mutate(rank = min_rank(desc(totalObitos))) %>%
+  arrange(rank, municipio) %>%
+  slice(1:27) %>%
+  pull(municipio)
+
+dados <- municipios_pb %>%
+  filter(municipio %in% top_municipios, diasXobitos >= 0) %>%
+  ungroup() %>%
+  mutate(municipio = fct_reorder(municipio, obitosNovosMedia,
+                                 max, .desc = TRUE))
+```
+
+#### Linear
+
+```{r, fig.height=10}
+plot_novos_por_grupo(dados, obitosNovos, obitosNovosMedia, municipio,
+                     meso)
+```
+
+<br>
+
+***
+
+#### Logarítmica
+
+```{r, fig.height=10}
+dados %>%
+  filter(totalObitos >= 2) %>%
+plot_novos_por_grupo(obitosNovos, obitosNovosMedia, municipio, meso,
+                     log_y = TRUE)
+```
+
+<br>
+
+***
+
+### Óbitos acumulados na Paraíba {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+```{r}
+dados <- paraiba %>%
+  filter(obitosAcumulados >= 1)
+```
+
+#### Logarítmica
+
+```{r}
+plot_acumulados_por_dia(dados, obitosAcumulados, obitosFracaoAumento,
+                        dataMetadeObitos, diasDobrouObitos, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+plot_acumulados_por_dia(dados, obitosAcumulados, obitosFracaoAumento,
+                        dataMetadeObitos, diasDobrouObitos)
+```
+
+<br>
+
+***
+
+### Diferença de óbitos novos na Paraíba {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Percentual <span style="color:#d9534f">por dia</span> em relação ao dia anterior e <ins style="color:black">média móvel</ins> para 7 dias</h5>
+
+```{r, message=FALSE, warning=FALSE}
+dados <- paraiba %>%
+  filter(obitosAcumulados >= 10)
+
+plot_fracao_novos_por_dia(dados, obitosFracaoAumento,  obitosFracaoAumentoMedia)
+```
+
+### Casos novos na Paraíba {.tabset .tabset-fade .tabset-pills} 
+<h5 class="text-muted">Valores <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+
+```{r}
+dados <- paraiba %>%
+  filter(casosAcumulados >= min_mortes)
+```
+
+
+#### Linear
+
+```{r}
+plot_novos_por_dia(dados, casosNovos, casosNovosMedia)
+```
+
+<br>
+
+***
+
+#### Logarítmica
+
+```{r}
+plot_novos_por_dia(dados, casosNovos, casosNovosMedia, log_y = TRUE)
+```
+
+<br>
+
+***
+
+
+### Casos novos nos municípios da Paraíba {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <span style="color:black">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+```{r}
+min_mortes <- 5
+
+top_municipios <- municipios_pb %>%
+  group_by(municipio) %>%
+  summarise(totalCasos = first(totalCasos)) %>%
+  mutate(rank = min_rank(desc(totalCasos))) %>%
+  arrange(rank, municipio) %>%
+  slice(1:27) %>%
+  pull(municipio)
+
+dados <- municipios_pb %>%
+  filter(municipio %in% top_municipios, diasXobitos >= 0) %>%
+  ungroup() %>%
+  mutate(municipio = fct_reorder(municipio, casosNovosMedia, last,
+                                 .desc = TRUE))
+```
+
+#### Linear
+
+```{r, fig.height=10}
+plot_novos_por_grupo(dados, casosNovos, casosNovosMedia, municipio, meso)
+```
+
+<br>
+
+***
+
+#### Logarítmica
+
+```{r, fig.height=10}
+plot_novos_por_grupo(dados, casosNovos, casosNovosMedia, municipio, meso,
+                     log_y = TRUE)
+```
+
+<br>
+
+***
+
+### Casos acumulados na Paraíba {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+```{r}
+dados <- paraiba %>%
+  filter(casosAcumulados >= 1)
+```
+
+#### Logarítmica
+
+```{r}
+plot_acumulados_por_dia(dados, casosAcumulados, casosFracaoAumento,
+                        dataMetadeCasos, diasDobrouCasos, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+plot_acumulados_por_dia(dados, casosAcumulados, casosFracaoAumento,
+                        dataMetadeCasos, diasDobrouCasos)
+```
+
+<br>
+
+***
+
+### Diferença de casos novos na Paraíba {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Percentual em relação ao dia anterior <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias</h5>
+
+```{r, message=FALSE, warning=FALSE}
+dados <- paraiba %>%
+  filter(casosAcumulados >= 10)
+
+plot_fracao_novos_por_dia(dados, casosFracaoAumento, casosFracaoAumentoMedia)
+```
+
+
+<br>
+
+***
+
+
+# João Pessoa
+
+### Óbitos novos em João Pessoa {.tabset .tabset-fade .tabset-pills} 
+<h5 class="text-muted">Valores <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+
+```{r}
+min_mortes <- 1
+
+dados <- joao_pessoa %>%
+  filter(obitosAcumulados >= min_mortes)
+```
+
+#### Linear
+
+```{r}
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia)
+```
+
+<br>
+
+***
+
+#### Logarítmica
+
+```{r}
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = TRUE)
+```
+
+<br>
+
+***
+
+### Óbitos acumulados em João Pessoa {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+```{r}
+dados <- joao_pessoa %>%
+  filter(obitosAcumulados >= 1)
+```
+
+#### Logarítmica
+
+```{r}
+plot_acumulados_por_dia(dados, obitosAcumulados, obitosFracaoAumento,
+                        dataMetadeObitos, diasDobrouObitos, log_y = TRUE)
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+plot_acumulados_por_dia(dados, obitosAcumulados, obitosFracaoAumento,
+                        dataMetadeObitos, diasDobrouObitos)
+# p +
+#   geom_text(
+#     aes(y = obitosAcumulados/2,
+#         label = paste("dobrou em\n", diasDobrouObitos, "dias")),
+#     data = subset(dados, data == dataMetadeObitos + floor(diasDobrouObitos/2)),
+#     size = 4, fontface = "bold", hjust = "center", col = 1, alpha = 0.8) +
+#   scale_y_continuous("Óbitos acumulados", expand = c(0, 0),
+#                 limits = c(0, max(dados$obitosAcumulados)*1.05))
+```
+
+<br>
+
+***
+
+### Diferença de óbitos em João Pessoa {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Percentual <span style="color:#d9534f">por dia</span> em relação ao dia anterior e <ins style="color:black">média móvel</ins> para 7 dias</h5>
+
+```{r, message=FALSE, warning=FALSE}
+dados <- joao_pessoa %>%
+  filter(obitosAcumulados >= 10)
+
+plot_fracao_novos_por_dia(dados, obitosFracaoAumento,  obitosFracaoAumentoMedia)
+```
+
+### Casos novos em João Pessoa {.tabset .tabset-fade .tabset-pills} 
+<h5 class="text-muted">Valores <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias. Escala:</h5>
+
+
+```{r}
+dados <- joao_pessoa %>%
+  filter(casosAcumulados >= min_mortes)
+```
+
+
+#### Linear
+
+```{r}
+plot_novos_por_dia(dados, casosNovos, casosNovosMedia)
+```
+
+<br>
+
+***
+
+#### Logarítmica
+
+```{r}
+plot_novos_por_dia(dados, casosNovos, casosNovosMedia, log_y = TRUE)
+```
+
+<br>
+
+***
+
+### Casos acumulados em João Pessoa {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Valores <ins style="color:black">por dia</ins> e <span style="background-color:#f4cfce;color:black">período</span> da última duplicação. Escala:</h5>
+
+```{r}
+dados <- joao_pessoa %>%
+  filter(casosAcumulados >= 1)
+
+p <- ggplot(dados, aes(data, casosAcumulados)) +
+  geom_area(data = subset(dados, data >= dataMetadeCasos), fill = "#f4cfce",
+            alpha = 0.4) +
+  geom_line(size = 0.8) +
+  geom_text(
+    aes(label = paste0(casosAcumulados, "\n", "(+",
+        percent(casosFracaoAumento, accuracy = 1), ")")),
+    data = subset(dados, data == max(data)), vjust = 0.7,
+    nudge_x = 0.5, size = 4, hjust = "left", fontface = "bold") +
+  scale_x_date("Dia", expand = c(0, 0), date_breaks = "1 week",
+               date_labels = "%d %b",
+               limits = c(min(dados$data), max(dados$data)+days(5))) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(face = "bold"),
+    axis.title.x = element_blank(),
+    axis.line.x = element_line(color = "grey",
+                               arrow = arrow(length = unit(4, "pt"),
+                                             type = "open")))
+```
+
+#### Logarítmica
+
+```{r}
+p +
+  geom_text(
+    aes(y = 10^(log10(casosAcumulados)/2),
+        label = paste("dobrou em\n", diasDobrouCasos, "dias")),
+    data = subset(dados, data == dataMetadeCasos + floor(diasDobrouCasos/2)),
+    size = 4, fontface = "bold", hjust = "center", col = 1, alpha = 0.8) +
+  scale_y_log10("Óbitos acumulados (log)", expand = c(0, 0),
+                limits = c(1, max(dados$casosAcumulados)*1.4),
+                breaks = c(1, 10, 100, 1000, 10000))
+```
+
+<br>
+
+***
+
+#### Linear
+
+```{r}
+p +
+  geom_text(
+    aes(y = casosAcumulados/2,
+        label = paste("dobrou em\n", diasDobrouCasos, "dias")),
+    data = subset(dados, data == dataMetadeCasos + floor(diasDobrouCasos/2)),
+    size = 4, fontface = "bold", hjust = "center", col = 1, alpha = 0.8) +
+  scale_y_continuous("Casos acumulados", expand = c(0, 0),
+                limits = c(0, max(dados$casosAcumulados)*1.05))
+```
+
+<br>
+
+***
+
+### Diferença de casos em João Pessoa {.tabset .tabset-fade .tabset-pills}
+<h5 class="text-muted">Percentual em relação ao dia anterior <span style="color:#d9534f">por dia</span> e <ins style="color:black">média móvel</ins> para 7 dias</h5>
+
+```{r, message=FALSE, warning=FALSE}
+dados <- joao_pessoa %>%
+  filter(casosAcumulados >= 10)
+
+plot_fracao_novos_por_dia(dados, casosFracaoAumento, casosFracaoAumentoMedia)
+```

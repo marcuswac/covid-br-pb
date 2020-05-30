@@ -16,7 +16,6 @@ library(forcats)
 library(ggplot2)
 library(ggrepel)
 library(lubridate)
-library(readxl)
 library(scales)
 library(zoo)
 

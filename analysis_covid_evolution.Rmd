@@ -1,7 +1,7 @@
 ---
 title: "Análise da evolução do COVID-19"
 author: "Marcus Carvalho"
-date: "Última atualização: 29/05/2020"
+date: "Última atualização: 01/06/2020"
 output: 
   html_document: 
     toc: yes
@@ -84,20 +84,20 @@ dados <- brasil %>%
   filter(obitosAcumulados >= 5)
 ```
 
-#### Logarítmica
+#### Linear
 
 ```{r}
-plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = TRUE)
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = FALSE)
 ```
 
 <br>
 
 ***
 
-#### Linear
+#### Logarítmica
 
 ```{r}
-plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = FALSE)
+plot_novos_por_dia(dados, obitosNovos, obitosNovosMedia, log_y = TRUE)
 ```
 
 <br>

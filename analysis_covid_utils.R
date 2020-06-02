@@ -10,6 +10,7 @@ library(zoo)
 
 carrega_dados_ms_xlsx <- function(arquivo) {
   res <- read_xlsx(arquivo, guess_max = 100000) %>%
+    distinct() %>%
     mutate(data = ymd(data),
            codmun = as.character(codmun),
            obitosAcumulados = as.integer(obitosAcumulado),
@@ -20,6 +21,7 @@ carrega_dados_ms_xlsx <- function(arquivo) {
 
 carrega_dados_ms_csv <- function(arquivo) {
   res <- read.csv(arquivo, na.strings = "") %>%
+    distinct() %>%
     mutate(data = ymd(data),
            obitosAcumulados = as.integer(obitosAcumulado),
            casosAcumulados = as.integer(casosAcumulado)) %>%
@@ -64,7 +66,7 @@ carrega_dados_estados_ms <- function(arquivo) {
 carrega_dados_brasil_ms <- function(arquivo) {
   dados_ms <- if (is.data.frame(arquivo)) arquivo else carrega_dados_ms_csv(arquivo)
   res <- dados_ms %>%
-    filter(is.na(codmun), is.na(estado))
+    filter(!is.na(regiao), is.na(codmun), is.na(estado))
   return(res)
 }
 
@@ -111,7 +113,7 @@ sumariza_casos_obitos <- function(dados, min_obitos = 5, agrupar_por = NULL) {
                                    obitosNovos / lag(obitosAcumulados), NA),
       obitosFracaoAumentoMedia = rollmean(obitosFracaoAumento, 7, fill = NA,
                                           align = "right"),
-      totalObitos = max(obitosAcumulados),
+      totalObitos = max(obitosAcumulados, na.rm = TRUE),
       obitosNovosMedia = rollmean(obitosNovos, 7, fill = NA, align = "right"),
       dataMetadeObitos = last(data[obitosAcumulados < last(obitosAcumulados)/2]),
       diasDobrouObitos = as.integer(last(data) - dataMetadeObitos),
@@ -159,14 +161,15 @@ plot_novos_por_dia <- function(dados, novos_metrica, media_metrica,
               data = last_day,
               nudge_x = 1, size = 4, hjust = "left", fontface = "bold",
               vjust = vjust_media) +
-    scale_x_date("Dia", date_breaks = "1 week", date_labels = "%d %b",
+    scale_x_date("Dia", date_breaks = "2 weeks", date_labels = "%d %b",
                  expand = expansion(c(0, 0.08))) +
     theme(panel.grid.minor = element_blank(),
           axis.title = element_blank())
   
   if (log_y) {
     p <- p +
-      scale_y_log10(breaks = c(1, 10, 100, 1000), limits = c(1, NA))
+      #scale_y_log10(breaks = c(1, 10, 100, 1000), limits = c(1, NA))
+      scale_y_continuous(trans = "log2", breaks = 2^(0:20), limits = c(1, NA))
   }
   return(p)
 }
@@ -188,7 +191,8 @@ plot_novos_por_grupo <- function(dados, novos_metrica, media_metrica,
     facet_wrap(vars(!!g_facet), scales = "free_x", ncol = 4) +
     scale_x_continuous("Dias desde o 5o óbito", expand = expansion(c(0, 0.25))) +
     scale_color_brewer(palette = "Set1") +
-    theme(legend.position = c(0.86, 0.07), panel.grid.minor = element_blank(),
+    theme(legend.position = c(0.86, 0.07),
+          panel.grid.minor.x = element_blank(),
           panel.grid.major.x = element_blank(),
           strip.text = element_text(face = "bold"),
           axis.line.x = element_line(color = "grey",
@@ -201,8 +205,13 @@ plot_novos_por_grupo <- function(dados, novos_metrica, media_metrica,
   
   if (log_y) {
     p <- p + 
-      scale_y_log10(expand = c(0.05, 0.05), breaks = c(1, 10, 100, 1000))
+      #scale_y_log10(expand = c(0.05, 0.05), breaks = c(1, 10, 100, 1000))
                   #limits = c(NA, max(dados$obitosNovosMedia)+10),
+      scale_y_continuous(trans = "log2", breaks = 4^(0:20), limits = c(1, NA))
+                         #expand = c(0.05, 0.05))
+  } else {
+    p <- p + 
+      scale_y_continuous(limits = c(0, NA))
   }
   return(p)
 }
@@ -252,7 +261,7 @@ plot_acumulados_por_dia <- function(dados, acumulados_metrica,
                  expand = expansion(c(0, 0.1))) +
     theme(
       legend.position = "none",
-      panel.grid.minor = element_blank(),
+      panel.grid.minor.x = element_blank(),
       strip.text = element_text(face = "bold"),
       axis.title = element_blank(),
       axis.line.x = element_line(color = "grey",
@@ -262,13 +271,16 @@ plot_acumulados_por_dia <- function(dados, acumulados_metrica,
   if (log_y) {
     p <- p +
       geom_text(
-        aes(y = 10^(log10(!!acumulados)/2),
+        aes(y = 2^(log2(!!acumulados)/2),
             label = paste("dobrou em\n", !!dobrou, "dias")),
         data = filter(dados, data == !!metade + floor(!!dobrou/2)),
         size = 4, fontface = "bold", hjust = "center", col = 1, alpha = 0.8) +
-      scale_y_log10("Óbitos acumulados (log)", expand = c(0, 0),
-                    limits = c(1, max(pull(dados, !!acumulados))*1.4),
-                    breaks = c(1, 10, 100, 1000, 10000))
+      #scale_y_log10("Óbitos acumulados (log)", expand = c(0, 0),
+      #              limits = c(1, max(pull(dados, !!acumulados))*1.4),
+      #              breaks = c(1, 10, 100, 1000, 10000))
+      scale_y_continuous("Óbitos acumulados (log)", trans = "log2",
+                         breaks = 2^(0:20), expand = c(0, 0),
+                         limits = c(1, max(pull(dados, !!acumulados))*1.4))
   } else {
     p <- p +
       geom_text(
@@ -310,7 +322,7 @@ plot_acumulados_por_grupo <- function(dados, acumulados_metrica,
     scale_x_continuous("Dias desde o 5o óbito", expand = c(0, 0),
                        limits = c(0, max(dados$diasXobitos)*1.3)) +
     scale_color_brewer(palette = "Set1") +
-    theme(legend.position = c(0.86, 0.07), panel.grid.minor = element_blank(),
+    theme(legend.position = c(0.86, 0.07), panel.grid.minor.x = element_blank(),
           panel.grid.major.x = element_blank(),
           strip.text = element_text(face = "bold"),
           axis.line.x = element_line(color = "grey",
@@ -324,12 +336,15 @@ plot_acumulados_por_grupo <- function(dados, acumulados_metrica,
   if (log_y) {
     p <- p +
       geom_text(
-        aes(y = 10^(log10(!!acumulados)/2), label = !!dobrou),
+        aes(y = 2^(log2(!!acumulados)/2), label = !!dobrou),
         data = filter(dados, data == !!metade + floor(!!dobrou / 2)),
         size = 3, fontface = "bold", hjust = "center", col = 1, alpha = 0.8) +
-      scale_y_log10(expand = c(0, 0),
-                    limits = c(1, max(pull(dados, !!acumulados)*4)),
-                    breaks = c(1, 10, 100, 1000, 10000))
+      #scale_y_log10(expand = c(0, 0),
+      #              limits = c(1, max(pull(dados, !!acumulados)*4)),
+      #              breaks = c(1, 10, 100, 1000, 10000))
+      scale_y_continuous(trans = "log2",
+                        breaks = 8^(0:20), expand = c(0, 0),
+                        limits = c(1, max(pull(dados, !!acumulados))*4))
   } else {
     p <- p +
       geom_text(aes(y = !!acumulados/2, label = !!dobrou),

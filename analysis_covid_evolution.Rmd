@@ -1,7 +1,7 @@
 ---
 title: "Análise da evolução do COVID-19"
 author: "Marcus Carvalho"
-date: "Última atualização: 01/06/2020"
+date: "Última atualização: 02/06/2020"
 output: 
   html_document: 
     toc: yes
@@ -28,7 +28,6 @@ Sys.setlocale("LC_TIME", "pt_BR.UTF-8")
 
 ```{r data, include=FALSE}
 arquivo_covid19pb <- "https://raw.githubusercontent.com/covid19pb/covid19pb.github.io/master/data/dados_pb_covid19_casosPorCidade.csv"
-arquivo_pb_brasilio <- file.path("data", "casos_pb_20200520.csv")
 arquivo_ms <- "data/covid-br-ms-complete.csv"
 
 dados_ms <- carrega_dados_ms_csv(arquivo_ms)

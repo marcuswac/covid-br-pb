@@ -1,1 +1,1 @@
-git add index.html && git commit -m "updating post" && git push
+git add index.html data && git commit -m "updating post" && git push

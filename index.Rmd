@@ -29,7 +29,7 @@ Sys.setlocale("LC_TIME", "pt_BR.UTF-8")
 ```{r data, include=FALSE}
 arquivo_ms <- "data/covid-br-ms-complete.csv"
 
-url_rt_cidades_ne <- "https://raw.githubusercontent.com/marcuswac/covid-br-model-epiforecasts/master/_nowcasts/covid-regional/brazil/ne-cities-summary/rt.csv"
+url_rt_cidades_ne <- "https://raw.githubusercontent.com/marcuswac/covid-br-epiforecasts/master/_nowcasts/covid-regional/brazil/ne-cities-summary/rt.csv"
 
 url_rt_estados <- "https://raw.githubusercontent.com/epiforecasts/covid-regional/master/brazil/regional-summary/rt.csv"
 
